@@ -194,7 +194,7 @@ const Navbar = () => {
           <div className="flex items-center">
             <a href="#home" className="flex items-center">
               <img 
-                src="/src/img/logo.png" 
+                src="/logo.png" 
                 alt="AlphaCred" 
                 className="h-16 w-auto object-contain"
               />
@@ -759,7 +759,7 @@ const Footer = () => {
         <div className="col-span-1">
           <div className="flex items-center gap-2 mb-6">
 <img
-              src="/src/img/logo.png"
+              src="/logo.png"
               alt="AlphaCred"
               className="h-16 w-auto object-contain"
             />
