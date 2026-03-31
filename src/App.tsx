@@ -631,64 +631,79 @@ const Method = () => {
 };
 
 const Testimonials = () => {
-  const testimonials = [
+  const [activeVideoIndex, setActiveVideoIndex] = useState<number | null>(null);
+  const videoRefs = useRef<Array<HTMLVideoElement | null>>([]);
+
+  const videos = [
     {
-      name: "Ricardo Santos",
-      role: "Empresário",
-      text: "A AlphaCred transformou minha situação financeira. Em menos de 30 dias, meu score subiu e consegui o financiamento que precisava para minha empresa.",
-      image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150"
+      title: 'Depoimento 1',
+      src: '/videos/video1.mp4',
+      caption: 'A autoridade que reconstrói crédito com agilidade e responsabilidade.'
     },
     {
-      name: "Ana Paula Silva",
-      role: "Profissional Liberal",
-      text: "Atendimento impecável e resultados reais. O sigilo e a transparência me deram a segurança que eu buscava para limpar meu histórico.",
-      image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150"
+      title: 'Depoimento 2',
+      src: '/videos/video2.mp4',
+      caption: 'Resultados reais para quem busca ser aprovado nos maiores bancos.'
     },
     {
-      name: "Marcos Oliveira",
-      role: "Diretor Comercial",
-      text: "Estratégia jurídica de alto nível. Recomendo a AlphaCred para quem busca reabilitação de crédito com autoridade e eficiência.",
-      image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=150"
+      title: 'Depoimento 3',
+      src: '/videos/video3.mp4',
+      caption: 'Estratégia segura, transparente e feita para o seu perfil de alto desempenho.'
     }
   ];
+
+  const handlePlay = (index: number) => {
+    setActiveVideoIndex(index);
+    videoRefs.current.forEach((video, idx) => {
+      if (idx !== index && video && !video.paused) {
+        video.pause();
+      }
+    });
+  };
+
+  const handlePause = (index: number) => {
+    if (activeVideoIndex === index) {
+      setActiveVideoIndex(null);
+    }
+  };
 
   return (
     <section className="py-32 bg-surface-container-low overflow-hidden">
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-20">
           <RevealText className="inline-block">
-            <h2 className="text-4xl md:text-5xl font-serif text-white font-bold mb-6 italic">Depoimentos de Elite</h2>
+            <h2 className="text-4xl md:text-5xl font-serif text-white font-bold mb-6 italic">Depoimentos em Vídeo</h2>
           </RevealText>
           <div className="h-1 w-24 bg-secondary mx-auto"></div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {testimonials.map((t, index) => (
+          {videos.map((video, index) => (
             <motion.div
-              key={t.name}
+              key={video.src}
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: index * 0.1 }}
-              className="glass-card p-8 relative"
+              className="glass-card overflow-hidden"
             >
-              <div className="flex items-center gap-4 mb-6">
-                <img 
-                  src={t.image} 
-                  alt={t.name} 
-                  className="w-16 h-16 rounded-full border-2 border-secondary object-cover"
-                  referrerPolicy="no-referrer"
+              <div className="relative">
+                <video
+                  ref={(el) => (videoRefs.current[index] = el)}
+                  src={video.src}
+                  controls
+                  preload="metadata"
+                  playsInline
+                  className="w-full h-auto max-h-[320px] bg-black"
+                  onPlay={() => handlePlay(index)}
+                  onPause={() => handlePause(index)}
                 />
-                <div>
-                  <h4 className="text-white font-bold">{t.name}</h4>
-                  <p className="text-secondary text-xs uppercase tracking-widest">{t.role}</p>
+                <div className="absolute top-4 left-4 bg-black/60 text-white text-xs uppercase tracking-[0.3em] px-3 py-1 rounded-full">
+                  {video.title}
                 </div>
               </div>
-              <p className="text-on-surface-variant italic leading-relaxed">
-                "{t.text}"
-              </p>
-              <div className="absolute top-8 right-8 text-secondary opacity-10">
-                <Shield className="w-12 h-12" />
+              <div className="p-6">
+                <p className="text-on-surface-variant leading-relaxed">{video.caption}</p>
               </div>
             </motion.div>
           ))}
