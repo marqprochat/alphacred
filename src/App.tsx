@@ -3,10 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { motion, AnimatePresence, useScroll, useTransform, useSpring, useInView } from 'motion/react';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence, useScroll, useTransform, useInView } from 'motion/react';
 import { 
-  Shield, 
   CheckCircle2, 
   ArrowRight, 
   ChevronDown, 
@@ -17,13 +16,175 @@ import {
   Menu, 
   X,
   Lock,
-  FileText,
   TrendingUp,
   UserCheck,
-  MessageCircle
+  MessageCircle,
+  Building2,
+  User,
+  Mail,
+  Home,
+  ChevronLeft,
+  LoaderCircle,
+  AlertCircle
 } from 'lucide-react';
 
 // --- Components ---
+
+type LeadFormData = {
+  nome: string;
+  cnpj: string;
+  cpf: string;
+  rg: string;
+  telefone: string;
+  email: string;
+  end: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  cep: string;
+};
+
+type SubmitState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'success'; rowNumber?: number; cadastroNumber?: number }
+  | { kind: 'error'; message: string };
+
+const INITIAL_FORM_DATA: LeadFormData = {
+  nome: '',
+  cnpj: '',
+  cpf: '',
+  rg: '',
+  telefone: '',
+  email: '',
+  end: '',
+  bairro: '',
+  cidade: '',
+  estado: '',
+  cep: '',
+};
+
+const FORM_STEPS = [
+  {
+    id: 0,
+    title: 'Identificacao',
+    description: 'Dados principais para localizar e analisar o cadastro.',
+    icon: User,
+    fields: ['nome', 'cnpj', 'cpf', 'rg'] as const,
+  },
+  {
+    id: 1,
+    title: 'Contato',
+    description: 'Informacoes para retorno rapido da equipe.',
+    icon: Mail,
+    fields: ['telefone', 'email'] as const,
+  },
+  {
+    id: 2,
+    title: 'Endereco',
+    description: 'Endereco completo para concluir o protocolo.',
+    icon: Home,
+    fields: ['end', 'bairro', 'cidade', 'estado', 'cep'] as const,
+  },
+] as const;
+
+const fieldLabels: Record<keyof LeadFormData, string> = {
+  nome: 'Nome completo / razao social',
+  cnpj: 'CNPJ',
+  cpf: 'CPF',
+  rg: 'RG',
+  telefone: 'Telefone',
+  email: 'E-mail',
+  end: 'Endereco',
+  bairro: 'Bairro',
+  cidade: 'Cidade',
+  estado: 'Estado',
+  cep: 'CEP',
+};
+
+const formatPhone = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+};
+
+const formatCpf = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  return digits
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+};
+
+const formatCnpj = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 14);
+  return digits
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2');
+};
+
+const formatCep = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  return digits.replace(/(\d{5})(\d)/, '$1-$2');
+};
+
+const getFieldError = (field: keyof LeadFormData, value: string, formData: LeadFormData) => {
+  const trimmed = value.trim();
+
+  if (field === 'cnpj' && !trimmed) {
+    return formData.cpf.trim() ? '' : 'Informe CPF ou CNPJ.';
+  }
+
+  if (field === 'cpf' && !trimmed) {
+    return formData.cnpj.trim() ? '' : 'Informe CPF ou CNPJ.';
+  }
+
+  if (!trimmed) return 'Campo obrigatorio.';
+
+  switch (field) {
+    case 'email':
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed) ? '' : 'Informe um e-mail valido.';
+    case 'telefone':
+      return trimmed.replace(/\D/g, '').length >= 10 ? '' : 'Informe um telefone valido.';
+    case 'cpf':
+      return trimmed.replace(/\D/g, '').length === 11 ? '' : 'CPF deve ter 11 digitos.';
+    case 'cnpj':
+      return trimmed.replace(/\D/g, '').length === 14 ? '' : 'CNPJ deve ter 14 digitos.';
+    case 'cep':
+      return trimmed.replace(/\D/g, '').length === 8 ? '' : 'CEP deve ter 8 digitos.';
+    case 'estado':
+      return trimmed.length === 2 ? '' : 'Use a sigla do estado com 2 letras.';
+    default:
+      return '';
+  }
+};
+
+const getStepErrors = (stepIndex: number, formData: LeadFormData) => {
+  const step = FORM_STEPS[stepIndex];
+  return step.fields.reduce<Record<string, string>>((acc, field) => {
+    const error = getFieldError(field, formData[field], formData);
+    if (error) acc[field] = error;
+    return acc;
+  }, {});
+};
+
+const normalizeFormData = (formData: LeadFormData): LeadFormData => ({
+  nome: formData.nome.trim(),
+  cnpj: formData.cnpj.trim(),
+  cpf: formData.cpf.trim(),
+  rg: formData.rg.trim(),
+  telefone: formData.telefone.trim(),
+  email: formData.email.trim(),
+  end: formData.end.trim(),
+  bairro: formData.bairro.trim(),
+  cidade: formData.cidade.trim(),
+  estado: formData.estado.trim().toUpperCase(),
+  cep: formData.cep.trim(),
+});
 
 const CountUp = ({ end, duration = 2, prefix = '', suffix = '' }: { end: number; duration?: number; prefix?: string; suffix?: string }) => {
   const [count, setCount] = useState(0);
@@ -261,86 +422,183 @@ const Navbar = () => {
 };
 
 const Hero = () => {
-  const [formData, setFormData] = useState({
-    name: '',
-    whatsapp: '',
-    service: 'Limpa Nome Estratégico'
-  });
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success'>('idle');
-  
+  const [formData, setFormData] = useState<LeadFormData>(INITIAL_FORM_DATA);
+  const [stepIndex, setStepIndex] = useState(0);
+  const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
+  const [submitState, setSubmitState] = useState<SubmitState>({ kind: 'idle' });
+
   const { scrollY } = useScroll();
   const y1 = useTransform(scrollY, [0, 500], [0, 200]);
   const y2 = useTransform(scrollY, [0, 500], [0, -100]);
+  const totalSteps = FORM_STEPS.length;
+  const progressPercentage = ((stepIndex + 1) / totalSteps) * 100;
+  const currentStep = FORM_STEPS[stepIndex];
+  const sheetsWebhookUrl = import.meta.env.VITE_GOOGLE_SHEETS_WEBHOOK_URL;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const setFieldValue = (field: keyof LeadFormData, rawValue: string) => {
+    let nextValue = rawValue;
+
+    if (field === 'telefone') nextValue = formatPhone(rawValue);
+    if (field === 'cpf') nextValue = formatCpf(rawValue);
+    if (field === 'cnpj') nextValue = formatCnpj(rawValue);
+    if (field === 'cep') nextValue = formatCep(rawValue);
+    if (field === 'estado') nextValue = rawValue.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase();
+
+    setFormData((prev) => ({ ...prev, [field]: nextValue }));
+
+    if (stepErrors[field]) {
+      const error = getFieldError(field, nextValue, { ...formData, [field]: nextValue });
+      setStepErrors((prev) => {
+        const next = { ...prev };
+        if (error) next[field] = error;
+        else delete next[field];
+        return next;
+      });
+    }
+
+    if (submitState.kind !== 'idle') {
+      setSubmitState({ kind: 'idle' });
+    }
+  };
+
+  const validateCurrentStep = () => {
+    const errors = getStepErrors(stepIndex, formData);
+    setStepErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const goToNextStep = () => {
+    if (!validateCurrentStep()) return;
+    setStepErrors({});
+    setStepIndex((current) => Math.min(current + 1, totalSteps - 1));
+  };
+
+  const goToPreviousStep = () => {
+    setStepErrors({});
+    setStepIndex((current) => Math.max(current - 1, 0));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStatus('loading');
-    // Simulate API call
-    setTimeout(() => {
-      setStatus('success');
-      setFormData({ name: '', whatsapp: '', service: 'Limpa Nome Estratégico' });
-      setTimeout(() => setStatus('idle'), 5000);
-    }, 1500);
+
+    const errors = getStepErrors(stepIndex, formData);
+    setStepErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    if (!sheetsWebhookUrl) {
+      setSubmitState({
+        kind: 'error',
+        message: 'Configure a variavel VITE_GOOGLE_SHEETS_WEBHOOK_URL antes de enviar.',
+      });
+      return;
+    }
+
+    try {
+      setSubmitState({ kind: 'loading' });
+
+      const response = await fetch(sheetsWebhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify(normalizeFormData(formData)),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Falha ao enviar. Codigo ${response.status}.`);
+      }
+
+      const result = await response.json();
+      const verified = result?.verified === true || result?.status === 'verified';
+      const rowNumber = typeof result?.rowNumber === 'number' ? result.rowNumber : undefined;
+      const cadastroNumber = typeof result?.cadastroNumber === 'number' ? result.cadastroNumber : undefined;
+
+      if (!verified) {
+        throw new Error(result?.message || 'A planilha nao confirmou a criacao da linha.');
+      }
+
+      setSubmitState({ kind: 'success', rowNumber, cadastroNumber });
+      setFormData(INITIAL_FORM_DATA);
+      setStepIndex(0);
+      setStepErrors({});
+    } catch (error) {
+      setSubmitState({
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'Nao foi possivel concluir o envio.',
+      });
+    }
   };
 
   return (
     <section id="home" className="relative min-h-screen flex items-center pt-36 pb-20 navy-gradient overflow-hidden">
       <motion.div style={{ y: y1 }} className="absolute inset-0 opacity-20">
-        <img 
-          src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=2070" 
-          alt="Corporative background" 
+        <img
+          src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=2070"
+          alt="Corporative background"
           className="w-full h-full object-cover"
           referrerPolicy="no-referrer"
         />
       </motion.div>
-      
-      <div className="relative max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
-        <motion.div 
+
+      <div className="relative max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
+        <motion.div
           style={{ y: y2 }}
           initial={{ opacity: 0, x: -50 }}
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8 }}
-          className="lg:col-span-7"
+          className="lg:col-span-7 lg:pt-10"
         >
-            <RevealText>
-              <span className="text-secondary font-label font-semibold tracking-[0.3em] uppercase text-xs mb-6 block">
-                Reabilitação de Crédito
-              </span>
-            </RevealText>
-            <RevealText>
-              <h1 className="text-5xl md:text-7xl font-serif text-white font-bold leading-tight mb-8">
-                Renove seu <br /> <span className="text-secondary">C</span>rédito
-              </h1>
-            </RevealText>
-            <motion.p
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              transition={{ delay: 0.5, duration: 1 }}
-              className="text-on-surface-variant text-lg md:text-xl max-w-xl mb-10 leading-relaxed font-light"
-            >
-              Recupere sua capacidade de crédito e volte a ter acesso a financiamentos, empréstimos e cartões com condições especiais.
-            </motion.p>
-          
-          <div className="grid grid-cols-2 gap-6 max-w-md">
-            <motion.div 
-              whileHover={{ x: 10 }}
-              className="flex items-center gap-3 cursor-default"
-            >
+          <RevealText>
+            <span className="text-secondary font-label font-semibold tracking-[0.3em] uppercase text-xs mb-6 block">
+              Reabilitacao de Credito
+            </span>
+          </RevealText>
+          <RevealText>
+            <h1 className="text-5xl md:text-7xl font-serif text-white font-bold leading-tight mb-8">
+              Renove seu <br /> <span className="text-secondary">Credito</span>
+            </h1>
+          </RevealText>
+          <motion.p
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            transition={{ delay: 0.5, duration: 1 }}
+            className="text-on-surface-variant text-lg md:text-xl max-w-xl mb-10 leading-relaxed font-light"
+          >
+            Cadastre seus dados com seguranca e nossa equipe inicia a analise para recuperar sua capacidade de credito com mais agilidade.
+          </motion.p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-md">
+            <motion.div whileHover={{ x: 10 }} className="flex items-center gap-3 cursor-default">
               <UserCheck className="text-secondary w-5 h-5" />
-              <span className="text-sm font-label text-white/80">Compliance Total</span>
+              <span className="text-sm font-label text-white/80">Conferencia antes da confirmacao</span>
             </motion.div>
-            <motion.div 
-              whileHover={{ x: 10 }}
-              className="flex items-center gap-3 cursor-default"
-            >
+            <motion.div whileHover={{ x: 10 }} className="flex items-center gap-3 cursor-default">
               <Lock className="text-secondary w-5 h-5" />
-              <span className="text-sm font-label text-white/80">Sigilo Absoluto</span>
+              <span className="text-sm font-label text-white/80">Dados protegidos</span>
             </motion.div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mt-10">
+            <div className="glass-card rounded-2xl border border-white/10 p-5">
+              <Building2 className="text-secondary w-5 h-5 mb-3" />
+              <p className="text-xs uppercase tracking-[0.25em] text-on-surface-variant">Pessoa juridica</p>
+              <p className="mt-2 text-sm text-white">Cadastro com CNPJ e dados de contato.</p>
+            </div>
+            <div className="glass-card rounded-2xl border border-white/10 p-5">
+              <User className="text-secondary w-5 h-5 mb-3" />
+              <p className="text-xs uppercase tracking-[0.25em] text-on-surface-variant">Pessoa fisica</p>
+              <p className="mt-2 text-sm text-white">Fluxo pronto para CPF, RG e endereco.</p>
+            </div>
+            <div className="glass-card rounded-2xl border border-white/10 p-5">
+              <CheckCircle2 className="text-secondary w-5 h-5 mb-3" />
+              <p className="text-xs uppercase tracking-[0.25em] text-on-surface-variant">Google Sheets</p>
+              <p className="mt-2 text-sm text-white">Confirmacao so aparece depois da verificacao.</p>
+            </div>
           </div>
         </motion.div>
 
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 50 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
@@ -349,78 +607,158 @@ const Hero = () => {
           id="contact"
         >
           <div className="glass-card p-8 lg:p-10 border-t-4 border-secondary shadow-2xl">
-            <h3 className="text-2xl font-serif text-white mb-2">Protocolo de Diagnóstico</h3>
-            <p className="text-on-surface-variant text-sm mb-8">
-              Preencha para receber uma análise preliminar gratuita do seu CPF/CNPJ.
-            </p>
-            
+            <div className="mb-6">
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="text-2xl font-serif text-white mb-2">Protocolo de Diagnostico</h3>
+                  <p className="text-on-surface-variant text-sm">
+                    Formulario em etapas para caber melhor no mobile e evitar envios incompletos.
+                  </p>
+                </div>
+                <div className="rounded-full border border-secondary/40 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.25em] text-secondary">
+                  Etapa {stepIndex + 1}/{totalSteps}
+                </div>
+              </div>
+
+              <div className="h-2 overflow-hidden rounded-full bg-white/10 mb-4">
+                <motion.div
+                  className="gold-gradient h-full rounded-full"
+                  animate={{ width: `${progressPercentage}%` }}
+                  transition={{ duration: 0.35 }}
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                {FORM_STEPS.map((step, index) => {
+                  const Icon = step.icon;
+                  const isActive = index === stepIndex;
+                  const isCompleted = index < stepIndex;
+
+                  return (
+                    <div
+                      key={step.id}
+                      className={`rounded-2xl border px-3 py-3 text-center transition-colors ${
+                        isActive
+                          ? 'border-secondary bg-secondary/10'
+                          : isCompleted
+                            ? 'border-secondary/40 bg-secondary/5'
+                            : 'border-white/10 bg-white/5'
+                      }`}
+                    >
+                      <Icon className={`mx-auto mb-2 w-4 h-4 ${isActive || isCompleted ? 'text-secondary' : 'text-on-surface-variant'}`} />
+                      <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${isActive ? 'text-white' : 'text-on-surface-variant'}`}>
+                        {step.title}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-label uppercase tracking-widest text-secondary font-bold">
-                  Nome Completo / Razão Social
-                </label>
-                <input 
-                  type="text" 
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full bg-primary-container/50 border border-white/10 focus:border-secondary text-white p-3.5 outline-none transition-all rounded-sm"
-                  placeholder="Digite seu nome"
-                />
-              </div>
-              
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-label uppercase tracking-widest text-secondary font-bold">
-                  WhatsApp
-                </label>
-                <input 
-                  type="tel" 
-                  required
-                  value={formData.whatsapp}
-                  onChange={(e) => setFormData({...formData, whatsapp: e.target.value})}
-                  className="w-full bg-primary-container/50 border border-white/10 focus:border-secondary text-white p-3.5 outline-none transition-all rounded-sm"
-                  placeholder="(00) 00000-0000"
-                />
-              </div>
-              
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-label uppercase tracking-widest text-secondary font-bold">
-                  Serviço Principal
-                </label>
-                <select 
-                  value={formData.service}
-                  onChange={(e) => setFormData({...formData, service: e.target.value})}
-                  className="w-full bg-primary-container/50 border border-white/10 focus:border-secondary text-white p-3.5 outline-none transition-all rounded-sm appearance-none"
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={currentStep.id}
+                  initial={{ opacity: 0, x: 24 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -24 }}
+                  transition={{ duration: 0.25 }}
+                  className="space-y-5"
                 >
-                  <option className="bg-primary-container">Limpa Nome Estratégico</option>
-                  <option className="bg-primary-container">Aumento de Rating (Score)</option>
-                  <option className="bg-primary-container">Regularização BACEN / SCR</option>
-                  <option className="bg-primary-container">Consultoria Empresarial</option>
-                </select>
-              </div>
-              
-              <button 
-                type="submit"
-                disabled={status === 'loading'}
-                className="w-full gold-gradient text-primary-container py-4 font-bold tracking-widest uppercase text-sm hover:scale-[1.02] transition-transform flex items-center justify-center gap-3 shadow-lg shadow-secondary/20 disabled:opacity-50"
-              >
-                {status === 'loading' ? (
-                  <div className="w-5 h-5 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
-                ) : status === 'success' ? (
-                  <>
-                    <Check className="w-5 h-5" />
-                    Enviado com Sucesso
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    Solicitar Diagnóstico
-                  </>
+                  <div className="mb-2">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-secondary">
+                      {currentStep.title}
+                    </p>
+                    <p className="mt-2 text-sm text-on-surface-variant">{currentStep.description}</p>
+                  </div>
+
+                  {currentStep.fields.map((field) => (
+                    <div key={field} className="space-y-1.5">
+                      <label className="text-[10px] font-label uppercase tracking-widest text-secondary font-bold">
+                        {fieldLabels[field]}
+                      </label>
+                      <input
+                        type={field === 'email' ? 'email' : field === 'telefone' ? 'tel' : 'text'}
+                        required={!(field === 'cpf' || field === 'cnpj')}
+                        value={formData[field]}
+                        onChange={(e) => setFieldValue(field, e.target.value)}
+                        className={`w-full bg-primary-container/50 border text-white p-3.5 outline-none transition-all rounded-xl ${
+                          stepErrors[field] ? 'border-red-400/80' : 'border-white/10 focus:border-secondary'
+                        }`}
+                        placeholder={fieldLabels[field]}
+                      />
+                      {stepErrors[field] && (
+                        <p className="text-xs text-red-300 flex items-center gap-2">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          {stepErrors[field]}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </motion.div>
+              </AnimatePresence>
+
+              {submitState.kind === 'error' && (
+                <div className="rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                  {submitState.message}
+                </div>
+              )}
+
+              {submitState.kind === 'success' && (
+                <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                  Cadastro confirmado{submitState.cadastroNumber ? ` com numero ${submitState.cadastroNumber}` : submitState.rowNumber ? ` na linha ${submitState.rowNumber}` : ''}.
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                {stepIndex > 0 && (
+                  <button
+                    type="button"
+                    onClick={goToPreviousStep}
+                    className="rounded-xl border border-white/10 px-5 py-3 text-white font-label text-sm font-bold uppercase tracking-[0.16em] hover:border-secondary/50 hover:text-secondary transition-colors flex items-center justify-center gap-2"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Voltar
+                  </button>
                 )}
-              </button>
+
+                {stepIndex < totalSteps - 1 ? (
+                  <button
+                    type="button"
+                    onClick={goToNextStep}
+                    className="w-full gold-gradient text-primary-container py-4 font-bold tracking-widest uppercase text-sm hover:scale-[1.02] transition-transform flex items-center justify-center gap-3 shadow-lg shadow-secondary/20 rounded-xl"
+                  >
+                    Proxima etapa
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={submitState.kind === 'loading'}
+                    className="w-full gold-gradient text-primary-container py-4 font-bold tracking-widest uppercase text-sm hover:scale-[1.02] transition-transform flex items-center justify-center gap-3 shadow-lg shadow-secondary/20 disabled:opacity-50 rounded-xl"
+                  >
+                    {submitState.kind === 'loading' ? (
+                      <>
+                        <LoaderCircle className="w-5 h-5 animate-spin" />
+                        Gravando e conferindo planilha
+                      </>
+                    ) : submitState.kind === 'success' ? (
+                      <>
+                        <Check className="w-5 h-5" />
+                        Confirmado
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        Enviar cadastro
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </form>
             <p className="mt-6 text-[10px] text-center text-on-surface-variant uppercase tracking-widest">
-              Atendimento disponível em todo o Brasil
+              Atendimento disponivel em todo o Brasil
             </p>
           </div>
         </motion.div>
@@ -878,3 +1216,4 @@ export default function App() {
     </div>
   );
 }
+
