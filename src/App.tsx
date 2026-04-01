@@ -42,6 +42,8 @@ type LeadFormData = {
   cidade: string;
   estado: string;
   cep: string;
+  numero: string;
+  complemento: string;
 };
 
 type SubmitState =
@@ -62,6 +64,8 @@ const INITIAL_FORM_DATA: LeadFormData = {
   cidade: '',
   estado: '',
   cep: '',
+  numero: '',
+  complemento: '',
 };
 
 const FORM_STEPS = [
@@ -82,9 +86,9 @@ const FORM_STEPS = [
   {
     id: 2,
     title: 'Endereco',
-    description: 'Endereco completo para concluir o protocolo.',
+    description: 'Informe o CEP para buscar o endereço via ViaCep. Depois adicione numero e complemento.',
     icon: Home,
-    fields: ['end', 'bairro', 'cidade', 'estado', 'cep'] as const,
+    fields: ['cep', 'numero', 'complemento', 'end', 'bairro', 'cidade', 'estado'] as const,
   },
 ] as const;
 
@@ -95,11 +99,13 @@ const fieldLabels: Record<keyof LeadFormData, string> = {
   rg: 'RG',
   telefone: 'Telefone',
   email: 'E-mail',
-  end: 'Endereco',
+  end: 'Rua',
   bairro: 'Bairro',
   cidade: 'Cidade',
   estado: 'Estado',
   cep: 'CEP',
+  numero: 'Numero',
+  complemento: 'Complemento',
 };
 
 const formatPhone = (value: string) => {
@@ -132,15 +138,50 @@ const formatCep = (value: string) => {
   return digits.replace(/(\d{5})(\d)/, '$1-$2');
 };
 
+const onlyDigits = (value: string) => value.replace(/\D/g, '');
+
+const isValidCpf = (cpf: string) => {
+  const digits = onlyDigits(cpf);
+  if (digits.length !== 11 || /^([0-9])\1{10}$/.test(digits)) return false;
+
+  const calcCheckDigit = (sliceLength: number) => {
+    const slice = digits.slice(0, sliceLength);
+    const factor = sliceLength + 1;
+    const total = slice.split('').reduce((sum, char, index) => sum + Number(char) * (factor - index), 0);
+    const remainder = total % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+
+  return (
+    Number(digits[9]) === calcCheckDigit(9) &&
+    Number(digits[10]) === calcCheckDigit(10)
+  );
+};
+
+const isValidCnpj = (cnpj: string) => {
+  const digits = onlyDigits(cnpj);
+  if (digits.length !== 14 || /^([0-9])\1{13}$/.test(digits)) return false;
+
+  const calcCheckDigit = (sliceLength: number) => {
+    const slice = digits.slice(0, sliceLength);
+    const weights = sliceLength === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const total = slice.split('').reduce((sum, char, index) => sum + Number(char) * weights[index], 0);
+    const remainder = total % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+
+  return (
+    Number(digits[12]) === calcCheckDigit(12) &&
+    Number(digits[13]) === calcCheckDigit(13)
+  );
+};
+
 const getFieldError = (field: keyof LeadFormData, value: string, formData: LeadFormData) => {
   const trimmed = value.trim();
+  const otherField = field === 'cpf' ? formData.cnpj.trim() : formData.cpf.trim();
 
-  if (field === 'cnpj' && !trimmed) {
-    return formData.cpf.trim() ? '' : 'Informe CPF ou CNPJ.';
-  }
-
-  if (field === 'cpf' && !trimmed) {
-    return formData.cnpj.trim() ? '' : 'Informe CPF ou CNPJ.';
+  if ((field === 'cnpj' || field === 'cpf') && !trimmed) {
+    return otherField ? '' : 'Informe CPF ou CNPJ.';
   }
 
   if (!trimmed) return 'Campo obrigatorio.';
@@ -150,14 +191,22 @@ const getFieldError = (field: keyof LeadFormData, value: string, formData: LeadF
       return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed) ? '' : 'Informe um e-mail valido.';
     case 'telefone':
       return trimmed.replace(/\D/g, '').length >= 10 ? '' : 'Informe um telefone valido.';
-    case 'cpf':
-      return trimmed.replace(/\D/g, '').length === 11 ? '' : 'CPF deve ter 11 digitos.';
-    case 'cnpj':
-      return trimmed.replace(/\D/g, '').length === 14 ? '' : 'CNPJ deve ter 14 digitos.';
+    case 'cpf': {
+      const digits = onlyDigits(trimmed);
+      if (digits.length !== 11) return 'CPF deve ter 11 digitos.';
+      return isValidCpf(trimmed) ? '' : 'CPF invalido.';
+    }
+    case 'cnpj': {
+      const digits = onlyDigits(trimmed);
+      if (digits.length !== 14) return 'CNPJ deve ter 14 digitos.';
+      return isValidCnpj(trimmed) ? '' : 'CNPJ invalido.';
+    }
     case 'cep':
       return trimmed.replace(/\D/g, '').length === 8 ? '' : 'CEP deve ter 8 digitos.';
     case 'estado':
       return trimmed.length === 2 ? '' : 'Use a sigla do estado com 2 letras.';
+    case 'numero':
+      return trimmed ? '' : 'Informe o numero da residencia.';
     default:
       return '';
   }
@@ -184,6 +233,8 @@ const normalizeFormData = (formData: LeadFormData): LeadFormData => ({
   cidade: formData.cidade.trim(),
   estado: formData.estado.trim().toUpperCase(),
   cep: formData.cep.trim(),
+  numero: formData.numero.trim(),
+  complemento: formData.complemento.trim(),
 });
 
 const CountUp = ({ end, duration = 2, prefix = '', suffix = '' }: { end: number; duration?: number; prefix?: string; suffix?: string }) => {
@@ -426,6 +477,9 @@ const Hero = () => {
   const [stepIndex, setStepIndex] = useState(0);
   const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
   const [submitState, setSubmitState] = useState<SubmitState>({ kind: 'idle' });
+  const [addressLookupError, setAddressLookupError] = useState('');
+  const [isAddressLoading, setIsAddressLoading] = useState(false);
+  const addressFetchedCepRef = useRef('');
 
   const { scrollY } = useScroll();
   const y1 = useTransform(scrollY, [0, 500], [0, 200]);
@@ -435,13 +489,59 @@ const Hero = () => {
   const currentStep = FORM_STEPS[stepIndex];
   const sheetsWebhookUrl = import.meta.env.VITE_GOOGLE_SHEETS_WEBHOOK_URL;
 
+  useEffect(() => {
+    const cepDigits = onlyDigits(formData.cep);
+    if (cepDigits.length !== 8) {
+      addressFetchedCepRef.current = '';
+      return;
+    }
+
+    if (addressFetchedCepRef.current === cepDigits) return;
+    addressFetchedCepRef.current = cepDigits;
+    setIsAddressLoading(true);
+    setAddressLookupError('');
+
+    fetch(`https://viacep.com.br/ws/${cepDigits}/json/`)
+      .then((res) => {
+        if (!res.ok) throw new Error('Nao foi possivel buscar o CEP.');
+        return res.json();
+      })
+      .then((data) => {
+        if (data.erro) throw new Error('CEP nao encontrado.');
+
+        setFormData((prev) => ({
+          ...prev,
+          end: data.logradouro || prev.end,
+          bairro: data.bairro || prev.bairro,
+          cidade: data.localidade || prev.cidade,
+          estado: (data.uf || prev.estado).toUpperCase(),
+        }));
+
+        setStepErrors((prev) => {
+          const next = { ...prev };
+          delete next.cep;
+          return next;
+        });
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : 'Falha ao buscar CEP.';
+        setAddressLookupError(message);
+        setStepErrors((prev) => ({ ...prev, cep: message }));
+      })
+      .finally(() => setIsAddressLoading(false));
+  }, [formData.cep]);
+
   const setFieldValue = (field: keyof LeadFormData, rawValue: string) => {
     let nextValue = rawValue;
 
     if (field === 'telefone') nextValue = formatPhone(rawValue);
     if (field === 'cpf') nextValue = formatCpf(rawValue);
     if (field === 'cnpj') nextValue = formatCnpj(rawValue);
-    if (field === 'cep') nextValue = formatCep(rawValue);
+    if (field === 'cep') {
+      addressFetchedCepRef.current = '';
+      setAddressLookupError('');
+      nextValue = formatCep(rawValue);
+    }
     if (field === 'estado') nextValue = rawValue.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase();
 
     setFormData((prev) => ({ ...prev, [field]: nextValue }));
@@ -495,13 +595,15 @@ const Hero = () => {
 
     try {
       setSubmitState({ kind: 'loading' });
+      const normalized = normalizeFormData(formData);
+      const finalEnd = [normalized.end, normalized.numero].filter(Boolean).join(', ') + (normalized.complemento ? ` - ${normalized.complemento}` : '');
 
       const response = await fetch(sheetsWebhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
-        body: JSON.stringify(normalizeFormData(formData)),
+        body: JSON.stringify({ ...normalized, end: finalEnd }),
       });
 
       if (!response.ok) {
@@ -672,29 +774,44 @@ const Hero = () => {
                     <p className="mt-2 text-sm text-on-surface-variant">{currentStep.description}</p>
                   </div>
 
-                  {currentStep.fields.map((field) => (
-                    <div key={field} className="space-y-1.5">
-                      <label className="text-[10px] font-label uppercase tracking-widest text-secondary font-bold">
-                        {fieldLabels[field]}
-                      </label>
-                      <input
-                        type={field === 'email' ? 'email' : field === 'telefone' ? 'tel' : 'text'}
-                        required={!(field === 'cpf' || field === 'cnpj')}
-                        value={formData[field]}
-                        onChange={(e) => setFieldValue(field, e.target.value)}
-                        className={`w-full bg-primary-container/50 border text-white p-3.5 outline-none transition-all rounded-xl ${
-                          stepErrors[field] ? 'border-red-400/80' : 'border-white/10 focus:border-secondary'
-                        }`}
-                        placeholder={fieldLabels[field]}
-                      />
-                      {stepErrors[field] && (
-                        <p className="text-xs text-red-300 flex items-center gap-2">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          {stepErrors[field]}
-                        </p>
-                      )}
-                    </div>
-                  ))}
+                  {currentStep.fields.map((field) => {
+                    const isReadOnly = field === 'end' || field === 'bairro' || field === 'cidade' || field === 'estado';
+
+                    return (
+                      <div key={field} className="space-y-1.5">
+                        <label className="text-[10px] font-label uppercase tracking-widest text-secondary font-bold">
+                          {fieldLabels[field]}
+                        </label>
+                        <input
+                          type={field === 'email' ? 'email' : field === 'telefone' ? 'tel' : 'text'}
+                          inputMode={field === 'numero' || field === 'cep' ? 'numeric' : undefined}
+                          required={!(field === 'cpf' || field === 'cnpj')}
+                          value={formData[field]}
+                          onChange={(e) => setFieldValue(field, e.target.value)}
+                          readOnly={isReadOnly}
+                          className={`w-full bg-primary-container/50 border text-white p-3.5 outline-none transition-all rounded-xl ${
+                            stepErrors[field] ? 'border-red-400/80' : 'border-white/10 focus:border-secondary'
+                          } ${isReadOnly ? 'opacity-80 cursor-not-allowed' : ''}`}
+                          placeholder={fieldLabels[field]}
+                        />
+                        {field === 'cep' && isAddressLoading && (
+                          <p className="text-xs text-secondary">Buscando endereco via CEP...</p>
+                        )}
+                        {stepErrors[field] && (
+                          <p className="text-xs text-red-300 flex items-center gap-2">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            {stepErrors[field]}
+                          </p>
+                        )}
+                        {field === 'cep' && !stepErrors[field] && addressLookupError && (
+                          <p className="text-xs text-red-300 flex items-center gap-2">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            {addressLookupError}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </motion.div>
               </AnimatePresence>
 
@@ -706,7 +823,7 @@ const Hero = () => {
 
               {submitState.kind === 'success' && (
                 <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-                  Cadastro confirmado{submitState.cadastroNumber ? ` com numero ${submitState.cadastroNumber}` : submitState.rowNumber ? ` na linha ${submitState.rowNumber}` : ''}.
+                  Cadastro confirmado! Aguarde que entraremos em contato.
                 </div>
               )}
 
@@ -1154,7 +1271,10 @@ const Footer = () => {
         </div>
       </div>
       
-      <div className="max-w-7xl mx-auto px-6 mt-16 pt-8 border-t border-white/5">
+      <div className="max-w-7xl mx-auto px-6 mt-16 pt-8 border-t border-white/5 space-y-4">
+        <p className="text-on-surface-variant text-xs text-center leading-relaxed">
+          "Para que todos vejam e saibam, considerem e juntamente entendam que a mão do Senhor fez isso" Isaías 41:20
+        </p>
         <p className="text-on-surface-variant text-[10px] text-center uppercase tracking-widest">
           © 2026 AlphaCred Reabilitação de Crédito. Todos os direitos reservados.
         </p>
