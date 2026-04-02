@@ -180,6 +180,10 @@ const getFieldError = (field: keyof LeadFormData, value: string, formData: LeadF
   const trimmed = value.trim();
   const otherField = field === 'cpf' ? formData.cnpj.trim() : formData.cpf.trim();
 
+  if (field === 'complemento') {
+    return '';
+  }
+
   if ((field === 'cnpj' || field === 'cpf') && !trimmed) {
     return otherField ? '' : 'Informe CPF ou CNPJ.';
   }
@@ -212,9 +216,12 @@ const getFieldError = (field: keyof LeadFormData, value: string, formData: LeadF
   }
 };
 
-const getStepErrors = (stepIndex: number, formData: LeadFormData) => {
+const getStepErrors = (stepIndex: number, formData: LeadFormData, addressFetched = false) => {
   const step = FORM_STEPS[stepIndex];
   return step.fields.reduce<Record<string, string>>((acc, field) => {
+    if (addressFetched && (field === 'end' || field === 'bairro' || field === 'cidade' || field === 'estado')) {
+      return acc;
+    }
     const error = getFieldError(field, formData[field], formData);
     if (error) acc[field] = error;
     return acc;
@@ -395,6 +402,7 @@ const Navbar = () => {
   const navLinks = [
     { name: 'Início', href: '#home' },
     { name: 'Quem Somos', href: '#about' },
+    { name: 'Missão & Valores', href: '#values' },
     { name: 'Serviços', href: '#services' },
     { name: 'O Processo', href: '#process' },
     { name: 'FAQ', href: '#faq' },
@@ -479,6 +487,7 @@ const Hero = () => {
   const [submitState, setSubmitState] = useState<SubmitState>({ kind: 'idle' });
   const [addressLookupError, setAddressLookupError] = useState('');
   const [isAddressLoading, setIsAddressLoading] = useState(false);
+  const [addressFetched, setAddressFetched] = useState(false);
   const addressFetchedCepRef = useRef('');
 
   const { scrollY } = useScroll();
@@ -516,10 +525,15 @@ const Hero = () => {
           cidade: data.localidade || prev.cidade,
           estado: (data.uf || prev.estado).toUpperCase(),
         }));
+        setAddressFetched(true);
 
         setStepErrors((prev) => {
           const next = { ...prev };
           delete next.cep;
+          delete next.end;
+          delete next.bairro;
+          delete next.cidade;
+          delete next.estado;
           return next;
         });
       })
@@ -527,6 +541,7 @@ const Hero = () => {
         const message = error instanceof Error ? error.message : 'Falha ao buscar CEP.';
         setAddressLookupError(message);
         setStepErrors((prev) => ({ ...prev, cep: message }));
+        setAddressFetched(false);
       })
       .finally(() => setIsAddressLoading(false));
   }, [formData.cep]);
@@ -539,6 +554,7 @@ const Hero = () => {
     if (field === 'cnpj') nextValue = formatCnpj(rawValue);
     if (field === 'cep') {
       addressFetchedCepRef.current = '';
+      setAddressFetched(false);
       setAddressLookupError('');
       nextValue = formatCep(rawValue);
     }
@@ -562,7 +578,7 @@ const Hero = () => {
   };
 
   const validateCurrentStep = () => {
-    const errors = getStepErrors(stepIndex, formData);
+    const errors = getStepErrors(stepIndex, formData, addressFetched);
     setStepErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -581,7 +597,7 @@ const Hero = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const errors = getStepErrors(stepIndex, formData);
+    const errors = getStepErrors(stepIndex, formData, addressFetched);
     setStepErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
@@ -680,24 +696,6 @@ const Hero = () => {
               <span className="text-sm font-label text-white/80">Dados protegidos</span>
             </motion.div>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mt-10">
-            <div className="glass-card rounded-2xl border border-white/10 p-5">
-              <Building2 className="text-secondary w-5 h-5 mb-3" />
-              <p className="text-xs uppercase tracking-[0.25em] text-on-surface-variant">Pessoa juridica</p>
-              <p className="mt-2 text-sm text-white">Cadastro com CNPJ e dados de contato.</p>
-            </div>
-            <div className="glass-card rounded-2xl border border-white/10 p-5">
-              <User className="text-secondary w-5 h-5 mb-3" />
-              <p className="text-xs uppercase tracking-[0.25em] text-on-surface-variant">Pessoa fisica</p>
-              <p className="mt-2 text-sm text-white">Fluxo pronto para CPF, RG e endereco.</p>
-            </div>
-            <div className="glass-card rounded-2xl border border-white/10 p-5">
-              <CheckCircle2 className="text-secondary w-5 h-5 mb-3" />
-              <p className="text-xs uppercase tracking-[0.25em] text-on-surface-variant">Google Sheets</p>
-              <p className="mt-2 text-sm text-white">Confirmacao so aparece depois da verificacao.</p>
-            </div>
-          </div>
         </motion.div>
 
         <motion.div
@@ -775,7 +773,7 @@ const Hero = () => {
                   </div>
 
                   {currentStep.fields.map((field) => {
-                    const isReadOnly = field === 'end' || field === 'bairro' || field === 'cidade' || field === 'estado';
+                    const isReadOnly = addressFetched && (field === 'end' || field === 'bairro' || field === 'cidade' || field === 'estado');
 
                     return (
                       <div key={field} className="space-y-1.5">
@@ -949,6 +947,87 @@ const About = () => {
               </div>
             </div>
           </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const MissionValues = () => {
+  const values = [
+    {
+      title: 'Transparência',
+      desc: 'Falamos a verdade, explicamos cada etapa e não prometemos o que não podemos cumprir.',
+    },
+    {
+      title: 'Ética e Responsabilidade',
+      desc: 'Trabalhamos dentro da legalidade, respeitando o cliente e as normas do mercado financeiro.',
+    },
+    {
+      title: 'Respeito ao Cliente',
+      desc: 'Cada pessoa tem uma história. Aqui, ninguém é tratado como número.',
+    },
+    {
+      title: 'Compromisso com Resultado',
+      desc: 'Nosso foco é entregar soluções reais, com prazos claros e objetivos definidos.',
+    },
+    {
+      title: 'Atendimento Humanizado',
+      desc: 'Escutamos, orientamos e acolhemos, porque crédito envolve sonhos, família e futuro.',
+    },
+  ];
+
+  return (
+    <section id="values" className="py-24 bg-surface">
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="text-center mb-16">
+          <RevealText className="inline-block">
+            <h2 className="text-4xl md:text-5xl font-serif text-white font-bold mb-6 italic">Missão, Visão e Valores</h2>
+          </RevealText>
+          <p className="text-on-surface-variant max-w-3xl mx-auto text-lg leading-relaxed">
+            Conheça o propósito que guia cada ação da AlphaCred: soluções financeiras humanas, transparentes e orientadas para resultados reais.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <div className="rounded-[32px] bg-background/70 border border-white/10 p-10 shadow-2xl">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 rounded-2xl bg-secondary/10 flex items-center justify-center text-secondary">
+                <UserCheck className="w-6 h-6" />
+              </div>
+              <h3 className="text-3xl font-serif text-white font-bold">Missão</h3>
+            </div>
+            <p className="text-on-surface-variant text-base leading-relaxed">
+              Ajudar pessoas e empresas a recuperarem sua dignidade financeira, oferecendo soluções claras, responsáveis e eficazes para reabilitação de crédito, sempre com transparência, respeito e atendimento humanizado.
+            </p>
+          </div>
+
+          <div className="rounded-[32px] bg-background/70 border border-white/10 p-10 shadow-2xl">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 rounded-2xl bg-secondary/10 flex items-center justify-center text-secondary">
+                <Building2 className="w-6 h-6" />
+              </div>
+              <h3 className="text-3xl font-serif text-white font-bold">Visão</h3>
+            </div>
+            <p className="text-on-surface-variant text-base leading-relaxed">
+              Ser referência nacional em soluções de reabilitação de crédito, reconhecida pela seriedade, pelos resultados entregues e pela confiança construída com cada cliente atendido.
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-[32px] bg-background/70 border border-white/10 p-10 shadow-2xl">
+          <h3 className="text-3xl font-serif text-white font-bold mb-8">Valores</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
+            {values.map((value) => (
+              <div key={value.title} className="flex items-start gap-4">
+                <CheckCircle2 className="text-secondary w-5 h-5 mt-1 flex-shrink-0" />
+                <div>
+                  <h4 className="text-lg text-white font-semibold mb-1">{value.title}</h4>
+                  <p className="text-on-surface-variant text-sm leading-relaxed">{value.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -1290,6 +1369,7 @@ export default function App() {
       <main>
         <Hero />
         <About />
+        <MissionValues />
         <Pillars />
         <Method />
         <Testimonials />
