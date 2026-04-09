@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useInView } from 'motion/react';
+import { trackError, trackEvent, getTelemetrySessionId } from './telemetry.ts';
 import { 
   CheckCircle2, 
   ArrowRight, 
@@ -265,6 +266,23 @@ const readJsonResponse = async (response: Response): Promise<JsonObject> => {
   }
 };
 
+const summarizeFormData = (formData: LeadFormData) => ({
+  hasNome: Boolean(formData.nome.trim()),
+  hasCpf: Boolean(formData.cpf.trim()),
+  hasCnpj: Boolean(formData.cnpj.trim()),
+  hasRg: Boolean(formData.rg.trim()),
+  hasTelefone: Boolean(formData.telefone.trim()),
+  hasEmail: Boolean(formData.email.trim()),
+  hasCep: Boolean(formData.cep.trim()),
+  hasEndereco: Boolean(formData.end.trim()),
+  hasNumero: Boolean(formData.numero.trim()),
+  hasComplemento: Boolean(formData.complemento.trim()),
+  nomeLength: formData.nome.trim().length,
+  telefoneDigits: onlyDigits(formData.telefone).length,
+  emailLength: formData.email.trim().length,
+  cepDigits: onlyDigits(formData.cep).length,
+});
+
 const CountUp = ({ end, duration = 2, prefix = '', suffix = '' }: { end: number; duration?: number; prefix?: string; suffix?: string }) => {
   const [count, setCount] = useState(0);
   const ref = useRef(null);
@@ -520,6 +538,24 @@ const Hero = () => {
   const sheetsWebhookUrl = import.meta.env.VITE_GOOGLE_SHEETS_WEBHOOK_URL;
   const isLastStep = stepIndex === totalSteps - 1;
   const isNavigationLocked = isAddressLoading || submitState.kind === 'loading';
+  const stepStartRef = useRef(Date.now());
+
+  useEffect(() => {
+    trackEvent('form_session_started', {
+      sessionId: getTelemetrySessionId(),
+      totalSteps,
+    });
+  }, [totalSteps]);
+
+  useEffect(() => {
+    stepStartRef.current = Date.now();
+    trackEvent('form_step_viewed', {
+      stepIndex,
+      stepTitle: currentStep.title,
+      totalSteps,
+      formState: summarizeFormData(formData),
+    });
+  }, [currentStep.title, stepIndex, totalSteps]);
 
   useEffect(() => {
     const cepDigits = onlyDigits(formData.cep);
@@ -546,6 +582,11 @@ const Hero = () => {
     let cancelled = false;
     const timeoutId = window.setTimeout(() => controller.abort(), 8000);
 
+    trackEvent('cep_lookup_started', {
+      stepIndex,
+      cepDigitsLength: cepDigits.length,
+    });
+
     fetch(`https://viacep.com.br/ws/${cepDigits}/json/`, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error('Nao foi possivel buscar o CEP.');
@@ -563,6 +604,11 @@ const Hero = () => {
           estado: typeof data.uf === 'string' ? data.uf.toUpperCase() : '',
         }));
         setAddressFetched(true);
+        trackEvent('cep_lookup_succeeded', {
+          stepIndex,
+          durationMs: Date.now() - stepStartRef.current,
+          addressAutoFilled: true,
+        });
 
         setStepErrors((prev) => {
           const next = { ...prev };
@@ -578,12 +624,20 @@ const Hero = () => {
         if (cancelled) return;
 
         if (controller.signal.aborted) {
+          trackEvent('cep_lookup_timeout', {
+            stepIndex,
+            durationMs: Date.now() - stepStartRef.current,
+          });
           setAddressLookupError('A busca do CEP demorou demais. Tente novamente.');
           setStepErrors((prev) => ({ ...prev, cep: 'A busca do CEP demorou demais. Tente novamente.' }));
           return;
         }
 
         const message = error instanceof Error ? error.message : 'Falha ao buscar CEP.';
+        trackError('cep_lookup_failed', error, {
+          stepIndex,
+          durationMs: Date.now() - stepStartRef.current,
+        });
         setAddressLookupError(message);
         setStepErrors((prev) => ({ ...prev, cep: message }));
         setAddressFetched(false);
@@ -636,18 +690,36 @@ const Hero = () => {
   const validateCurrentStep = () => {
     const errors = getStepErrors(stepIndex, formData, addressFetched);
     setStepErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      trackEvent('form_step_validation_failed', {
+        stepIndex,
+        stepTitle: currentStep.title,
+        errors,
+        formState: summarizeFormData(formData),
+      });
+    }
     return Object.keys(errors).length === 0;
   };
 
   const goToNextStep = () => {
     if (isNavigationLocked) return;
     if (!validateCurrentStep()) return;
+    trackEvent('form_step_advanced', {
+      fromStepIndex: stepIndex,
+      toStepIndex: Math.min(stepIndex + 1, totalSteps - 1),
+      durationMs: Date.now() - stepStartRef.current,
+    });
     setStepErrors({});
     setStepIndex((current) => Math.min(current + 1, totalSteps - 1));
   };
 
   const goToPreviousStep = () => {
     if (isNavigationLocked) return;
+    trackEvent('form_step_returned', {
+      fromStepIndex: stepIndex,
+      toStepIndex: Math.max(stepIndex - 1, 0),
+      durationMs: Date.now() - stepStartRef.current,
+    });
     setStepErrors({});
     setStepIndex((current) => Math.max(current - 1, 0));
   };
@@ -657,9 +729,19 @@ const Hero = () => {
 
     const errors = getStepErrors(stepIndex, formData, addressFetched);
     setStepErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      trackEvent('form_submit_blocked_by_validation', {
+        stepIndex,
+        errors,
+        formState: summarizeFormData(formData),
+      });
+      return;
+    }
 
     if (!sheetsWebhookUrl) {
+      trackEvent('form_submit_missing_webhook', {
+        stepIndex,
+      });
       setSubmitState({
         kind: 'error',
         message: 'Configure a variavel VITE_GOOGLE_SHEETS_WEBHOOK_URL antes de enviar.',
@@ -671,6 +753,11 @@ const Hero = () => {
       setSubmitState({ kind: 'loading' });
       const normalized = normalizeFormData(formData);
       const finalEnd = [normalized.end, normalized.numero].filter(Boolean).join(', ') + (normalized.complemento ? ` - ${normalized.complemento}` : '');
+      const submitStartedAt = Date.now();
+      trackEvent('form_submit_started', {
+        stepIndex,
+        formState: summarizeFormData(normalized),
+      });
       const controller = new AbortController();
       const timeoutId = window.setTimeout(() => controller.abort(), 15000);
       let response: Response;
@@ -700,14 +787,31 @@ const Hero = () => {
         typeof result?.message === 'string' ? result.message : 'A planilha nao confirmou a criacao da linha.';
 
       if (!verified) {
+        trackEvent('form_submit_not_verified', {
+          stepIndex,
+          durationMs: Date.now() - submitStartedAt,
+          rowNumber,
+          cadastroNumber,
+          serverMessage,
+        });
         throw new Error(serverMessage);
       }
 
+      trackEvent('form_submit_succeeded', {
+        stepIndex,
+        durationMs: Date.now() - submitStartedAt,
+        rowNumber,
+        cadastroNumber,
+      });
       setSubmitState({ kind: 'success', rowNumber, cadastroNumber });
       setFormData(INITIAL_FORM_DATA);
       setStepIndex(0);
       setStepErrors({});
     } catch (error) {
+      trackError('form_submit_failed', error, {
+        stepIndex,
+        formState: summarizeFormData(formData),
+      });
       setSubmitState({
         kind: 'error',
         message:

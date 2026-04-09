@@ -1,6 +1,7 @@
 import {StrictMode, useEffect, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
+import { trackError, trackEvent } from './telemetry.ts';
 import './index.css';
 
 function FatalScreen() {
@@ -21,7 +22,22 @@ function AppShell() {
   const [hasFatalError, setHasFatalError] = useState(false);
 
   useEffect(() => {
-    const handleError = () => setHasFatalError(true);
+    const handleError = (event: Event) => {
+      if ('reason' in event) {
+        trackError('app_unhandled_rejection', (event as PromiseRejectionEvent).reason);
+      } else {
+        const errorEvent = event as ErrorEvent;
+        trackError('app_fatal_error', errorEvent.error ?? errorEvent.message, {
+          source: errorEvent.filename,
+          line: errorEvent.lineno,
+          column: errorEvent.colno,
+        });
+      }
+
+      setHasFatalError(true);
+    };
+
+    trackEvent('app_shell_mounted');
 
     window.addEventListener('error', handleError);
     window.addEventListener('unhandledrejection', handleError);
