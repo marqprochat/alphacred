@@ -52,6 +52,8 @@ type SubmitState =
   | { kind: 'success'; rowNumber?: number; cadastroNumber?: number }
   | { kind: 'error'; message: string };
 
+type JsonObject = Record<string, unknown>;
+
 const INITIAL_FORM_DATA: LeadFormData = {
   nome: '',
   cnpj: '',
@@ -184,6 +186,10 @@ const getFieldError = (field: keyof LeadFormData, value: string, formData: LeadF
     return '';
   }
 
+  if (field === 'rg' && formData.cnpj.trim()) {
+    return '';
+  }
+
   if ((field === 'cnpj' || field === 'cpf') && !trimmed) {
     return otherField ? '' : 'Informe CPF ou CNPJ.';
   }
@@ -243,6 +249,21 @@ const normalizeFormData = (formData: LeadFormData): LeadFormData => ({
   numero: formData.numero.trim(),
   complemento: formData.complemento.trim(),
 });
+
+const readJsonResponse = async (response: Response): Promise<JsonObject> => {
+  const raw = await response.text();
+
+  if (!raw.trim()) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as JsonObject;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    throw new Error('O servidor respondeu em um formato invalido.');
+  }
+};
 
 const CountUp = ({ end, duration = 2, prefix = '', suffix = '' }: { end: number; duration?: number; prefix?: string; suffix?: string }) => {
   const [count, setCount] = useState(0);
@@ -497,33 +518,49 @@ const Hero = () => {
   const progressPercentage = ((stepIndex + 1) / totalSteps) * 100;
   const currentStep = FORM_STEPS[stepIndex];
   const sheetsWebhookUrl = import.meta.env.VITE_GOOGLE_SHEETS_WEBHOOK_URL;
+  const isLastStep = stepIndex === totalSteps - 1;
+  const isNavigationLocked = isAddressLoading || submitState.kind === 'loading';
 
   useEffect(() => {
     const cepDigits = onlyDigits(formData.cep);
     if (cepDigits.length !== 8) {
       addressFetchedCepRef.current = '';
+      setIsAddressLoading(false);
       return;
     }
 
     if (addressFetchedCepRef.current === cepDigits) return;
     addressFetchedCepRef.current = cepDigits;
     setIsAddressLoading(true);
+    setAddressFetched(false);
     setAddressLookupError('');
+    setFormData((prev) => ({
+      ...prev,
+      end: '',
+      bairro: '',
+      cidade: '',
+      estado: '',
+    }));
 
-    fetch(`https://viacep.com.br/ws/${cepDigits}/json/`)
-      .then((res) => {
+    const controller = new AbortController();
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => controller.abort(), 8000);
+
+    fetch(`https://viacep.com.br/ws/${cepDigits}/json/`, { signal: controller.signal })
+      .then(async (res) => {
         if (!res.ok) throw new Error('Nao foi possivel buscar o CEP.');
-        return res.json();
+        return readJsonResponse(res);
       })
       .then((data) => {
+        if (cancelled) return;
         if (data.erro) throw new Error('CEP nao encontrado.');
 
         setFormData((prev) => ({
           ...prev,
-          end: data.logradouro || prev.end,
-          bairro: data.bairro || prev.bairro,
-          cidade: data.localidade || prev.cidade,
-          estado: (data.uf || prev.estado).toUpperCase(),
+          end: typeof data.logradouro === 'string' ? data.logradouro : '',
+          bairro: typeof data.bairro === 'string' ? data.bairro : '',
+          cidade: typeof data.localidade === 'string' ? data.localidade : '',
+          estado: typeof data.uf === 'string' ? data.uf.toUpperCase() : '',
         }));
         setAddressFetched(true);
 
@@ -538,12 +575,31 @@ const Hero = () => {
         });
       })
       .catch((error) => {
+        if (cancelled) return;
+
+        if (controller.signal.aborted) {
+          setAddressLookupError('A busca do CEP demorou demais. Tente novamente.');
+          setStepErrors((prev) => ({ ...prev, cep: 'A busca do CEP demorou demais. Tente novamente.' }));
+          return;
+        }
+
         const message = error instanceof Error ? error.message : 'Falha ao buscar CEP.';
         setAddressLookupError(message);
         setStepErrors((prev) => ({ ...prev, cep: message }));
         setAddressFetched(false);
       })
-      .finally(() => setIsAddressLoading(false));
+      .finally(() => {
+        window.clearTimeout(timeoutId);
+        if (!cancelled) {
+          setIsAddressLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, [formData.cep]);
 
   const setFieldValue = (field: keyof LeadFormData, rawValue: string) => {
@@ -584,12 +640,14 @@ const Hero = () => {
   };
 
   const goToNextStep = () => {
+    if (isNavigationLocked) return;
     if (!validateCurrentStep()) return;
     setStepErrors({});
     setStepIndex((current) => Math.min(current + 1, totalSteps - 1));
   };
 
   const goToPreviousStep = () => {
+    if (isNavigationLocked) return;
     setStepErrors({});
     setStepIndex((current) => Math.max(current - 1, 0));
   };
@@ -613,26 +671,36 @@ const Hero = () => {
       setSubmitState({ kind: 'loading' });
       const normalized = normalizeFormData(formData);
       const finalEnd = [normalized.end, normalized.numero].filter(Boolean).join(', ') + (normalized.complemento ? ` - ${normalized.complemento}` : '');
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+      let response: Response;
 
-      const response = await fetch(sheetsWebhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
-        body: JSON.stringify({ ...normalized, end: finalEnd }),
-      });
+      try {
+        response = await fetch(sheetsWebhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8',
+          },
+          body: JSON.stringify({ ...normalized, end: finalEnd }),
+          signal: controller.signal,
+        });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
 
       if (!response.ok) {
         throw new Error(`Falha ao enviar. Codigo ${response.status}.`);
       }
 
-      const result = await response.json();
+      const result = await readJsonResponse(response);
       const verified = result?.verified === true || result?.status === 'verified';
       const rowNumber = typeof result?.rowNumber === 'number' ? result.rowNumber : undefined;
       const cadastroNumber = typeof result?.cadastroNumber === 'number' ? result.cadastroNumber : undefined;
+      const serverMessage =
+        typeof result?.message === 'string' ? result.message : 'A planilha nao confirmou a criacao da linha.';
 
       if (!verified) {
-        throw new Error(result?.message || 'A planilha nao confirmou a criacao da linha.');
+        throw new Error(serverMessage);
       }
 
       setSubmitState({ kind: 'success', rowNumber, cadastroNumber });
@@ -642,7 +710,12 @@ const Hero = () => {
     } catch (error) {
       setSubmitState({
         kind: 'error',
-        message: error instanceof Error ? error.message : 'Nao foi possivel concluir o envio.',
+        message:
+          error instanceof Error && error.name === 'AbortError'
+            ? 'O envio demorou demais para responder. Tente novamente em alguns instantes.'
+            : error instanceof Error
+              ? error.message
+              : 'Nao foi possivel concluir o envio.',
       });
     }
   };
@@ -773,7 +846,7 @@ const Hero = () => {
                   </div>
 
                   {currentStep.fields.map((field) => {
-                    const isReadOnly = addressFetched && (field === 'end' || field === 'bairro' || field === 'cidade' || field === 'estado');
+                    const isAutoFilled = addressFetched && (field === 'end' || field === 'bairro' || field === 'cidade' || field === 'estado');
 
                     return (
                       <div key={field} className="space-y-1.5">
@@ -783,14 +856,14 @@ const Hero = () => {
                         <input
                           type={field === 'email' ? 'email' : field === 'telefone' ? 'tel' : 'text'}
                           inputMode={field === 'numero' || field === 'cep' ? 'numeric' : undefined}
-                          required={!(field === 'cpf' || field === 'cnpj')}
+                          required={!(field === 'cpf' || field === 'cnpj' || field === 'complemento')}
                           value={formData[field]}
                           onChange={(e) => setFieldValue(field, e.target.value)}
-                          readOnly={isReadOnly}
                           className={`w-full bg-primary-container/50 border text-white p-3.5 outline-none transition-all rounded-xl ${
                             stepErrors[field] ? 'border-red-400/80' : 'border-white/10 focus:border-secondary'
-                          } ${isReadOnly ? 'opacity-80 cursor-not-allowed' : ''}`}
+                          } ${isAutoFilled ? 'opacity-80' : ''}`}
                           placeholder={fieldLabels[field]}
+                          disabled={submitState.kind === 'loading'}
                         />
                         {field === 'cep' && isAddressLoading && (
                           <p className="text-xs text-secondary">Buscando endereco via CEP...</p>
@@ -830,6 +903,7 @@ const Hero = () => {
                   <button
                     type="button"
                     onClick={goToPreviousStep}
+                    disabled={isNavigationLocked}
                     className="rounded-xl border border-white/10 px-5 py-3 text-white font-label text-sm font-bold uppercase tracking-[0.16em] hover:border-secondary/50 hover:text-secondary transition-colors flex items-center justify-center gap-2"
                   >
                     <ChevronLeft className="w-4 h-4" />
@@ -841,15 +915,25 @@ const Hero = () => {
                   <button
                     type="button"
                     onClick={goToNextStep}
+                    disabled={isNavigationLocked}
                     className="w-full gold-gradient text-primary-container py-4 font-bold tracking-widest uppercase text-sm hover:scale-[1.02] transition-transform flex items-center justify-center gap-3 shadow-lg shadow-secondary/20 rounded-xl"
                   >
-                    Proxima etapa
-                    <ArrowRight className="w-4 h-4" />
+                    {isAddressLoading && isLastStep ? (
+                      <>
+                        <LoaderCircle className="w-5 h-5 animate-spin" />
+                        Buscando endereco
+                      </>
+                    ) : (
+                      <>
+                        Proxima etapa
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
                   </button>
                 ) : (
                   <button
                     type="submit"
-                    disabled={submitState.kind === 'loading'}
+                    disabled={isNavigationLocked}
                     className="w-full gold-gradient text-primary-container py-4 font-bold tracking-widest uppercase text-sm hover:scale-[1.02] transition-transform flex items-center justify-center gap-3 shadow-lg shadow-secondary/20 disabled:opacity-50 rounded-xl"
                   >
                     {submitState.kind === 'loading' ? (
@@ -1344,7 +1428,7 @@ const Footer = () => {
               <Phone className="text-secondary w-4 h-4" /> (19) 99351-0227
             </li>
             <li className="text-on-surface-variant text-sm flex items-center gap-2">
-              <MapPin className="text-secondary w-4 h-4" /> São Paulo, SP
+                <MapPin className="text-secondary w-4 h-4" /> Nova Odessa/SP
             </li>
           </ul>
         </div>
@@ -1416,4 +1500,3 @@ export default function App() {
     </div>
   );
 }
-
