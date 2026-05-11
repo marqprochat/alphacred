@@ -1588,7 +1588,7 @@ export default function App() {
                 Começar Agora
               </MagneticButton>
               <MagneticButton 
-                href="https://wa.me/5519993510227"
+                href="https://wa.me/message/TXIEJDWEE4K6O1"
                 className="border border-secondary text-secondary px-10 py-5 font-bold tracking-widest uppercase text-lg hover:bg-secondary/10 transition-colors flex items-center justify-center gap-2 block"
               >
                 <div className="flex items-center gap-2">
