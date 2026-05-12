@@ -6,15 +6,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useInView } from 'motion/react';
 import { trackError, trackEvent, getTelemetrySessionId } from './telemetry.ts';
-import { 
-  CheckCircle2, 
-  ArrowRight, 
-  ChevronDown, 
-  Send, 
-  Phone, 
-  MapPin, 
-  Check, 
-  Menu, 
+import {
+  CheckCircle2,
+  ArrowRight,
+  ChevronDown,
+  Send,
+  Phone,
+  MapPin,
+  Check,
+  Menu,
   X,
   Lock,
   TrendingUp,
@@ -381,7 +381,7 @@ const FlipCard = ({ pillar, index }: any) => {
   const [isFlipped, setIsFlipped] = useState(false);
 
   return (
-    <div 
+    <div
       className="perspective-1000 h-[400px] w-full cursor-pointer"
       onMouseEnter={() => setIsFlipped(true)}
       onMouseLeave={() => setIsFlipped(false)}
@@ -389,7 +389,7 @@ const FlipCard = ({ pillar, index }: any) => {
       <motion.div
         className="relative w-full h-full preserve-3d transition-all duration-700"
         animate={{ rotateY: isFlipped ? 180 : 0 }}
-            transition={{ type: "spring", damping: 15, stiffness: 180 }}
+        transition={{ type: "spring", damping: 15, stiffness: 180 }}
       >
         {/* Front */}
         <div className="absolute inset-0 backface-hidden glass-card p-10 flex flex-col justify-between border-t-2 border-secondary/30">
@@ -450,19 +450,19 @@ const Navbar = () => {
   return (
     <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${isScrolled ? 'bg-background/90 backdrop-blur-md border-b border-white/5 h-24' : 'bg-transparent h-28'}`}>
       <div className="max-w-7xl mx-auto px-6 h-full flex justify-between items-center">
-          <div className="flex items-center">
-            <a href="#home" className="flex items-center">
-              <img 
-                src="/logo.png" 
-                alt="AlphaCred" 
-                className="h-16 w-auto object-contain"
-              />
-            </a>
-          </div>
+        <div className="flex items-center">
+          <a href="#home" className="flex items-center">
+            <img
+              src="/logo.png"
+              alt="AlphaCred"
+              className="h-16 w-auto object-contain"
+            />
+          </a>
+        </div>
 
         <div className="hidden lg:flex space-x-8 items-center">
           {navLinks.map((link) => (
-            <a 
+            <a
               key={link.name}
               href={link.href}
               className="text-on-surface-variant hover:text-secondary transition-colors font-label text-sm tracking-wide"
@@ -470,7 +470,7 @@ const Navbar = () => {
               {link.name}
             </a>
           ))}
-          <a 
+          <a
             href="#contact"
             className="gold-gradient text-primary-container px-6 py-2.5 font-bold font-label text-xs uppercase tracking-widest hover:brightness-110 transition-all active:scale-95"
           >
@@ -478,7 +478,7 @@ const Navbar = () => {
           </a>
         </div>
 
-        <button 
+        <button
           className="lg:hidden text-white"
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         >
@@ -489,14 +489,14 @@ const Navbar = () => {
       {/* Mobile Menu */}
       <AnimatePresence>
         {isMobileMenuOpen && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             className="lg:hidden absolute top-full left-0 w-full bg-surface border-b border-white/5 p-6 space-y-4"
           >
             {navLinks.map((link) => (
-              <a 
+              <a
                 key={link.name}
                 href={link.href}
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -505,7 +505,7 @@ const Navbar = () => {
                 {link.name}
               </a>
             ))}
-            <a 
+            <a
               href="#contact"
               onClick={() => setIsMobileMenuOpen(false)}
               className="block gold-gradient text-primary-container px-6 py-3 text-center font-bold font-label text-sm uppercase tracking-widest"
@@ -914,13 +914,12 @@ const Hero = () => {
                   return (
                     <div
                       key={step.id}
-                      className={`rounded-2xl border px-3 py-3 text-center transition-colors ${
-                        isActive
-                          ? 'border-secondary bg-secondary/10'
-                          : isCompleted
-                            ? 'border-secondary/40 bg-secondary/5'
-                            : 'border-white/10 bg-white/5'
-                      }`}
+                      className={`rounded-2xl border px-3 py-3 text-center transition-colors ${isActive
+                        ? 'border-secondary bg-secondary/10'
+                        : isCompleted
+                          ? 'border-secondary/40 bg-secondary/5'
+                          : 'border-white/10 bg-white/5'
+                        }`}
                     >
                       <Icon className={`mx-auto mb-2 w-4 h-4 ${isActive || isCompleted ? 'text-secondary' : 'text-on-surface-variant'}`} />
                       <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${isActive ? 'text-white' : 'text-on-surface-variant'}`}>
@@ -963,9 +962,8 @@ const Hero = () => {
                           required={!(field === 'cpf' || field === 'cnpj' || field === 'complemento')}
                           value={formData[field]}
                           onChange={(e) => setFieldValue(field, e.target.value)}
-                          className={`w-full bg-primary-container/50 border text-white p-3.5 outline-none transition-all rounded-xl ${
-                            stepErrors[field] ? 'border-red-400/80' : 'border-white/10 focus:border-secondary'
-                          } ${isAutoFilled ? 'opacity-80' : ''}`}
+                          className={`w-full bg-primary-container/50 border text-white p-3.5 outline-none transition-all rounded-xl ${stepErrors[field] ? 'border-red-400/80' : 'border-white/10 focus:border-secondary'
+                            } ${isAutoFilled ? 'opacity-80' : ''}`}
                           placeholder={fieldLabels[field]}
                           disabled={submitState.kind === 'loading'}
                         />
@@ -1075,16 +1073,16 @@ const About = () => {
     <section id="about" className="py-24 bg-surface">
       <div className="max-w-7xl mx-auto px-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
             transition={{ duration: 0.8 }}
             className="relative"
           >
-            <img 
-              src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=1000" 
-              alt="Financial Analysis" 
+            <img
+              src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=1000"
+              alt="Financial Analysis"
               className="w-full rounded-xl shadow-2xl border border-secondary/20"
               referrerPolicy="no-referrer"
             />
@@ -1097,8 +1095,8 @@ const About = () => {
               </p>
             </div>
           </motion.div>
-          
-          <motion.div 
+
+          <motion.div
             initial={{ opacity: 0, x: 50 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
@@ -1113,7 +1111,7 @@ const About = () => {
             <p className="text-on-surface-variant text-lg leading-relaxed mb-8">
               Através de estratégias jurídicas fundamentadas e acesso técnico aos sistemas bancários, removemos entraves que impedem seu crescimento, focando sempre no resultado prático e na discrição.
             </p>
-            
+
             <div className="flex flex-col gap-6">
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center shrink-0">
@@ -1266,7 +1264,7 @@ const Pillars = () => {
           <RevealText className="inline-block">
             <h2 className="text-4xl md:text-5xl font-serif text-white font-bold mb-6 italic">Os 3 Pilares Alpha</h2>
           </RevealText>
-          <motion.div 
+          <motion.div
             initial={{ width: 0 }}
             whileInView={{ width: 96 }}
             viewport={{ once: true }}
@@ -1275,19 +1273,19 @@ const Pillars = () => {
           ></motion.div>
         </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {pillars.map((pillar, index) => (
-              <motion.div
-                key={pillar.id}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: index * 0.2 }}
-              >
-                <FlipCard pillar={pillar} index={index} />
-              </motion.div>
-            ))}
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {pillars.map((pillar, index) => (
+            <motion.div
+              key={pillar.id}
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: index * 0.2 }}
+            >
+              <FlipCard pillar={pillar} index={index} />
+            </motion.div>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -1325,7 +1323,7 @@ const Method = () => {
         </RevealText>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {steps.map((step, index) => (
-            <motion.div 
+            <motion.div
               key={step.num}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -1335,7 +1333,7 @@ const Method = () => {
               className="text-center group"
             >
               <div className="relative w-20 h-20 mx-auto mb-6">
-                <motion.div 
+                <motion.div
                   className="absolute inset-0 gold-gradient rounded-full blur-lg opacity-0 group-hover:opacity-50 transition-opacity"
                 />
                 <div className="relative w-20 h-20 rounded-full gold-gradient flex items-center justify-center text-primary-container font-bold text-2xl shadow-xl">
@@ -1460,7 +1458,7 @@ const FAQ = () => {
         <div className="space-y-4">
           {faqs.map((faq, index) => (
             <div key={index} className="glass-card overflow-hidden">
-              <button 
+              <button
                 onClick={() => setOpenIndex(openIndex === index ? null : index)}
                 className="w-full p-6 flex justify-between items-center text-left"
               >
@@ -1469,7 +1467,7 @@ const FAQ = () => {
               </button>
               <AnimatePresence>
                 {openIndex === index && (
-                  <motion.div 
+                  <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
@@ -1495,7 +1493,7 @@ const Footer = () => {
       <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-12">
         <div className="col-span-1">
           <div className="flex items-center gap-2 mb-6">
-<img
+            <img
               src="/logo.png"
               alt="AlphaCred"
               className="h-16 w-auto object-contain"
@@ -1505,7 +1503,7 @@ const Footer = () => {
             Referência nacional em inteligência de crédito e reabilitação estratégica de ativos para perfis de alta performance.
           </p>
         </div>
-        
+
         <div>
           <h4 className="text-white font-serif font-bold mb-6">Serviços</h4>
           <ul className="space-y-3">
@@ -1515,7 +1513,7 @@ const Footer = () => {
             <li><a href="#" className="text-on-surface-variant hover:text-white transition-colors text-sm">Blindagem de Ativos</a></li>
           </ul>
         </div>
-        
+
         <div>
           <h4 className="text-white font-serif font-bold mb-6">Institucional</h4>
           <ul className="space-y-3">
@@ -1524,20 +1522,20 @@ const Footer = () => {
             <li><a href="#contact" className="text-on-surface-variant hover:text-white transition-colors text-sm">Fale Conosco</a></li>
           </ul>
         </div>
-        
+
         <div>
           <h4 className="text-white font-serif font-bold mb-6">Contato</h4>
           <ul className="space-y-3">
             <li className="text-on-surface-variant text-sm flex items-center gap-2">
-              <Phone className="text-secondary w-4 h-4" /> (19) 99351-0227
+              <Phone className="text-secondary w-4 h-4" /> (19) 99419-4717
             </li>
             <li className="text-on-surface-variant text-sm flex items-center gap-2">
-                <MapPin className="text-secondary w-4 h-4" /> Nova Odessa/SP
+              <MapPin className="text-secondary w-4 h-4" /> Nova Odessa/SP
             </li>
           </ul>
         </div>
       </div>
-      
+
       <div className="max-w-7xl mx-auto px-6 mt-16 pt-8 border-t border-white/5 space-y-4">
         <p className="text-on-surface-variant text-xs text-center leading-relaxed">
           "Para que todos vejam e saibam, considerem e juntamente entendam que a mão do Senhor fez isso" Isaías 41:20
@@ -1562,11 +1560,11 @@ export default function App() {
         <Method />
         <Testimonials />
         <FAQ />
-        
+
         {/* Final CTA */}
         <section className="py-24 bg-primary-container text-center relative overflow-hidden">
           <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -1581,13 +1579,13 @@ export default function App() {
               Não deixe que o passado financeiro limite o seu futuro. Fale com um consultor agora.
             </p>
             <div className="flex flex-col sm:flex-row justify-center items-center gap-6">
-              <MagneticButton 
+              <MagneticButton
                 href="#contact"
                 className="gold-gradient text-primary-container px-10 py-5 font-bold tracking-widest uppercase text-lg shadow-2xl block"
               >
                 Começar Agora
               </MagneticButton>
-              <MagneticButton 
+              <MagneticButton
                 href="https://wa.me/message/TXIEJDWEE4K6O1"
                 className="border border-secondary text-secondary px-10 py-5 font-bold tracking-widest uppercase text-lg hover:bg-secondary/10 transition-colors flex items-center justify-center gap-2 block"
               >
